@@ -1,0 +1,30 @@
+Package: FlightControl
+Type: Package
+Title: Airplane flight track analysis
+Version: 0.0.1
+Authors@R: c(
+    person("Steinkamp", "Joerg", email="joergsteinkamp@yahoo.de", role=c("aut", "cre"))
+    )
+Author: Joerg Steinkamp
+Maintainer: Joerg Steinkamp <joergsteinkamp@yahoo.de>
+URL: https://github.com/joergsteinkamp/FlightControl
+BugReports: https://github.com/joergsteinkamp/FlightControl/issues
+Description: Visualizes flight tracks recorded by dump1080.
+License: GPL | file LICENSE
+Encoding: UTF-8
+LazyData: true
+Depends:
+    R (>= 2.11.0)
+Imports:
+    Cairo,
+    ggplot2,
+    gstat,
+    methods,
+    OpenStreetMap,
+    raster,
+    rgdal,
+    rgl,
+    sp,
+    utils,
+    viridis
+RoxygenNote: 5.0.1
