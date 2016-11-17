@@ -1,6 +1,6 @@
 Package: FlightControl
 Type: Package
-Title: Airplane flight track analysis
+Title: Airplane flight track visualization
 Version: 0.0.1
 Authors@R: c(
     person("Steinkamp", "Joerg", email="joergsteinkamp@yahoo.de", role=c("aut", "cre"))
@@ -16,7 +16,6 @@ LazyData: true
 Depends:
     R (>= 2.11.0)
 Imports:
-    Cairo,
     ggplot2,
     gstat,
     methods,
@@ -28,3 +27,8 @@ Imports:
     utils,
     viridis
 RoxygenNote: 5.0.1
+Suggests: 
+    Cairo,
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr

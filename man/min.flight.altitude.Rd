@@ -16,13 +16,18 @@
 
 \item{proj}{target projection}
 
-\item{method}{interpolation method}
+\item{method}{interpolation method (see Details)}
 }
 \value{
 a interpolated SpatialPixelsDataFrame of minimum flight altitude
 }
 \description{
-calculate a surface of the minimum flight height
+Interpolation methods:
+\itemize{
+\item{raw}{no interpolation}
+\item{idw}{kriging see \code{\link[gstst]{krige}}}
+\item{sph/gau}{variogram model see \code{\link[gstat]{vgm}}}
+}
 }
 \author{
 Joerg Steinkamp \email{joergsteinkamp@yahoo.de}

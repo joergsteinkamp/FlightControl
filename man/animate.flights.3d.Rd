@@ -4,10 +4,14 @@
 \alias{animate.flights.3d}
 \title{3D isosurface of lowest flight altitude}
 \usage{
-animate.flights.3d(flights)
+animate.flights.3d(flights, dem, tracks = TRUE)
 }
 \arguments{
 \item{flights}{the flights data.frame}
+
+\item{dem}{digital elevation model}
+
+\item{tracks}{logical if the individual tracks should be shown (default) or a transparent 'carpet' of the spatially interpolated lowest flight altitude.}
 }
 \description{
 3D isosurface of lowest flight altitude

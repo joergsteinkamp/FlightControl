@@ -1,0 +1,84 @@
+---
+title: "FlightControl"
+author: "Joerg Steinkamp"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{FlightControl}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+## Get the raw data
+
+To capture the data, you need a SDR-RTL dongle and the software [dump1090](https://github.com/antirez/dump1090). Compile it and run the command in a terminal shell
+```{bash, eval=FALSE}
+./dump1090 --aggressive --quiet --net
+```
+On port 30003 of localhost, you can capture the result via the commandline
+```{bash, eval=FALSE}
+nc -d 127.0.0.1 30003 >> flights_$(date +\%Y\%m\%d).csv
+```
+
+I did this on a [Debian Linux](https://www.debian.org/) desktop and on a [Raspberry Pi](https://www.raspberrypi.org/) with Raspbian.
+
+## Get it into R
+
+Load the package:
+
+```{r}
+library(FlightControl)
+```
+
+And run `covert` with the recorded dates the path to where the csv files are (`source.dir`) and where to save the RData files (`target.dir`). This converts the raw CSV files above in much smaller RData files. However, allready with a tiny bit of loss, since `convert` calls `airplanes` with its default parameters. You can override this by setting `raw=TRUE` or  changing `min.altitude`/`max.altitude=99999` and/or `unit="feet"`. Setting raw to TRUE returns the data as is. Changing only the min/max altitude matches the flight IDs and flight positions and converts feet to meters, if unit isn't set to "feet". Currently only feet and meter are supported, anything else given as unit is treated as meters. 
+
+```{r, eval=FALSE}
+dates <- seq(strptime("2016-10-15", format="%Y-%m-%d"),
+             strptime("2016-11-08", format="%Y-%m-%d"), 86400)
+convert(dates, "data", "data", max.altitude=3000)
+```
+```{r, echo=FALSE}
+dates <- seq(strptime("2016-10-15", format="%Y-%m-%d"),
+             strptime("2016-11-08", format="%Y-%m-%d"), 86400)
+```
+
+Now import those .RData files and append them if desired by passing either one date or several to `import`. And since several callSigns appear several times a day, e.g. when a plane lands and then starts again, those have to be split, which is done by `split.pause.callSign` after `pause.limit` seconds (default 900).
+
+```{r, eval=FALSE}
+flights <- import(dates[16], source.dir = "data", verbose=FALSE)
+flights <- split.pause.callSign(flights)
+```
+```{r, echo=FALSE}
+data(flights)
+flights <- split.pause.callSign(flights)
+```
+
+## Images and animations
+
+### Flat 2D maps
+
+I prefer CairoPNG, since it renders fonts much better than the default R device. However, if Cairo isn't available it falls back to the standard png. The video `flightControl2D.mp4` is saved in the current working directory and the individual files are delete, if the commandline tool ffmpeg is available. However, if `ffmpeg` is not available the files will be kept in the temporary R directory, which can be derived via `tempdir()`.
+
+```{r, fig.width=7, fig.height=5}
+animate.flights.2d(flights)
+```
+
+### 3D with rgl
+
+For the terrain I prepared a digital elevation model (`dem`) based on the [Shuttle Radar Topographic Mission (SRTM)](http://www2.jpl.nasa.gov/srtm/), that is needed by `animate.flights.3d` as an parameter. If you want to use  the package for another region, you need to get and prepare your own DEM data.
+
+First filter out those flights not to include in the analysis, e.g. remove those where the callSign starts with 'DM', or include only those with more than 10 nodes.
+```{r}
+flights <- subset(flights, !grepl("^DM", callSign))
+nodes <- table(flights$callSign)
+flights <- subset(flights, flights$callSign %in% names(nodes[nodes>10]))
+```
+
+There are two possible OpenGL 3D plots, one with individual flight tracks (takes very long) and one with a transparent 'carpet' of the minimum flight altitude remapped on a 1km grid (only a bit faster).
+
+```{r}
+animate.flights.3d(flights, dem)
+animate.flights.3d(flights, dem, tracks = FALSE)
+```
+
+For the video the same as above for the 2D movie is valid. If the commandline tool 'ffmpeg' is not available the pictures ar in R's temporyry folder. 

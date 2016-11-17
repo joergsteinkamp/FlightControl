@@ -4,12 +4,15 @@
 \alias{airplanes}
 \title{read the air traffic csv file}
 \usage{
-airplanes(file, raw = FALSE, max.altitude = 5000, unit = "m")
+airplanes(file, raw = FALSE, min.altitude = -999, max.altitude = 5000,
+  unit = "m")
 }
 \arguments{
 \item{file}{path to and name of the csv file}
 
 \item{raw}{logical i ftrue returns the full data set otherwise extract only position/altitude/time with callSign (flightID)}
+
+\item{min.altitude}{ignore positions below that altitude in the given unit}
 
 \item{max.altitude}{ignore positions above that altitude in the given unit}
 

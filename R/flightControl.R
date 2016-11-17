@@ -1,24 +1,10 @@
-#library(viridis)
-#library(rgl)
-#library(raster)
-#library(Cairo)
-#library(OpenStreetMap)
-#library(ggplot2)
-#library(gstat)
-#library(rgdal)
-##library(akima)
-##library(mgcv)
-
-##################################
-### functions ####################
-##################################
-
 #' read the air traffic csv file
 #'
 #' reads a csv file recorded by \href{https://github.com/antirez/dump1090}{dump1090} and returns it as data.frame
 #'
 #' @param file path to and name of the csv file
 #' @param raw logical i ftrue returns the full data set otherwise extract only position/altitude/time with callSign (flightID)
+#' @param min.altitude ignore positions below that altitude in the given unit
 #' @param max.altitude ignore positions above that altitude in the given unit
 #' @param unit default m(eter). If anything else than f(eet) is given the default is used
 #' @return data.frame
@@ -26,7 +12,7 @@
 #' @references \href{https://github.com/antirez/dump1090}{dump1090}
 #' @export
 #' @importFrom utils read.table
-airplanes <- function(file, raw=FALSE, max.altitude=5000, unit="m") {
+airplanes <- function(file, raw=FALSE, min.altitude=-999, max.altitude=5000, unit="m") {
   message=type=altitude=hexIdent=callSign=NULL
   flight.raw <- read.table(file, sep=",", stringsAsFactors=FALSE)
   if (raw)
@@ -47,8 +33,11 @@ airplanes <- function(file, raw=FALSE, max.altitude=5000, unit="m") {
   ## feet -> m
   if (!grepl("^f", tolower(unit)))
     flight.pos$altitude = 0.3048 * flight.pos$altitude
+  ## only above min.altitude
+  flight.pos = subset(flight.pos, altitude >= min.altitude)
   ## only below max.altitude
-  flight.pos = subset(flight.pos, altitude < max.altitude)
+  flight.pos = subset(flight.pos, altitude <= max.altitude)
+
 
   ## create a real datetime column
   flight.ids$date <- strptime(paste(flight.ids$gen.date, flight.ids$gen.time), format="%Y/%m/%d %H:%M:%S")
@@ -141,12 +130,12 @@ split.pause.callSign <- function(flights, pause.limit=900) {
   return(flights)
 }
 
-#' add linear interpolated points to flight tracks
-#'
-#' @param flights the flights data.frame
-#' @param res spatial resolution
-#' @return a new flights data.frame with more rows, but some neglected columns
-#' @author Joerg Steinkamp \email{joergsteinkamp@@yahoo.de}
+## add linear interpolated points to flight tracks
+##
+## @param flights the flights data.frame
+## @param res spatial resolution
+## @return a new flights data.frame with more rows, but some neglected columns
+## @author Joerg Steinkamp \email{joergsteinkamp@@yahoo.de}
 add.knots <- function(flights, res) {
   UID=NULL
   ## add linear interpolated points to flight track in the distance of sqrt(res^2 + res^2),
@@ -171,7 +160,7 @@ add.knots <- function(flights, res) {
                                                 altitude=seq(flights.tmp$altitude[i - 1], flights.tmp$altitude[i], length.out=n),
                                                 callSign=flights.tmp$callSign[1])[2:n, ])
         } else {
-          hres.flights <- rbind(hres.flights, flights.tmp[i-1, ])
+          hres.flights <- rbind(hres.flights, flights.tmp[i, ])
         }
       }
     }
@@ -186,11 +175,18 @@ add.knots <- function(flights, res) {
 
 #' calculate a surface of the minimum flight height
 #'
+#' Interpolation methods:
+#' \itemize{
+#' \item{raw}{no interpolation}
+#' \item{idw}{kriging see \code{\link[gstst]{krige}}}
+#' \item{sph/gau}{variogram model see \code{\link[gstat]{vgm}}}
+#' }
+#'
 #' @param flights flights data.frame as returned by
 #' @param extent a spatial extent object
 #' @param res target resolution
 #' @param proj target projection
-#' @param method interpolation method
+#' @param method interpolation method (see Details)
 #' @return a interpolated SpatialPixelsDataFrame of minimum flight altitude
 #' @author Joerg Steinkamp \email{joergsteinkamp@@yahoo.de}
 #' @export
@@ -201,7 +197,7 @@ add.knots <- function(flights, res) {
 ### @importFrom sp coordinates gridded spTransform proj4string CRS GridTopology as.SpatialPolygons.GridTopology over bbox
 ### @importFrom raster projection
 #' @importFrom gstat variogram fit.variogram vgm
-min.flight.altitude <- function(flights, extent=NULL, res=NULL, proj=NULL, method="idw") {
+min.flight.altitude <- function(flights, extent=NULL, res=NULL, proj=NULL, method="raw") {
   lon=lat=NULL
   x <- seq(floor(extent@xmin / res) * res,
              ceiling(extent@xmax / res) * res, res)
@@ -215,7 +211,9 @@ min.flight.altitude <- function(flights, extent=NULL, res=NULL, proj=NULL, metho
 
   ## BUG: hardcoded resolution increase of flight tracks; approx. every sqrt(2 * res^2)
   ## Improvement/Solution: check unit of projection and scale based on center of extent
-  flights <- add.knots(flights, 30 / 3.6e6 * res)
+
+  ## takes too long and no hardly any gain
+  ##flights <- add.knots(flights, 30 / 3.6e6 * res)
 
   ## reproject
   coordinates(flights) = ~lon+lat
@@ -251,6 +249,9 @@ min.flight.altitude <- function(flights, extent=NULL, res=NULL, proj=NULL, metho
 
   coordinates(altitude) = ~x+y
   projection(altitude) = CRS(proj)
+
+  if (method=="raw")
+    return(altitude)
 
   ## from the gstat manual (https://cran.r-project.org/web/packages/gstat/vignettes/gstat.pdf)
   if (method=="idw") {
@@ -290,11 +291,12 @@ min.flight.altitude <- function(flights, extent=NULL, res=NULL, proj=NULL, metho
 #' @param step a new picture every "step" minutes"
 #' @export
 #' @author Joerg Steinkamp \email{joergsteinkamp@@yahoo.de}
-#' @importFrom OpenStreetMap openmap openproj
-#' @importFrom Cairo CairoPNG
+#' @import OpenStreetMap
+### @importFrom OpenStreetMap openmap openproj
+#### @importMethodsFrom OpenStreetMap autoplot
 #' @importFrom ggplot2 autoplot aes geom_path annotate scale_colour_gradientn xlab ylab
 #' @importFrom viridis inferno
-#' @importFrom grDevices dev.off
+#' @importFrom grDevices dev.off png
 animate.flights.2d <- function(flights, step=5) {
   lon=lat=altitude=callSign=NULL
   extent <- extent(x=c(min(flights$lon), max(flights$lon)),
@@ -309,8 +311,11 @@ animate.flights.2d <- function(flights, step=5) {
                  type = "apple-iphoto", minNumTiles=10)
   mapLatLon <- openproj(map)
 
-  CairoPNG(file.path(tempdir(), "movie%04d.png"), width=1280, height=720, res=96)
-
+  if (requireNamespace("Cairo", quietly = TRUE)) {
+    Cairo::CairoPNG(file.path(tempdir(), "movie%04d.png"), width=1280, height=1024, res=96)
+  } else {
+    png(file.path(tempdir(), "movie%04d.png"), width=1280, height=1024)
+  }
   ## one hour time offset to keep flight tracks on map
   time.offset <- 3600
   delta.sec <- step * 60 - as.numeric(strftime(min(flights$date), format="%S"))
@@ -333,12 +338,14 @@ animate.flights.2d <- function(flights, step=5) {
   }
   dev.off()
   ## https://www.ffmpeg.org/ffmpeg-utils.html#Video-size (-s option, adjust also width and height above)
-  system("ffmpeg -i tmp/movie%04d.png -s hd720 -r ntsc -vcodec libx264 flightControl2D.mp4")
-  system("rm tmp/movie*.png")
-
+  if (length(system2("which", "ffmpeg", stdout=TRUE))>0) {
+    system(paste0("ffmpeg -y -i ", file.path(tempdir(), "movie%04d.png"), " -s sxga -r ntsc -vcodec libx264 flightControl2D.mp4"))
+    system(paste0("rm ", file.path(tempdir(), "movie*.png")))
+  } else {
+    message(paste0("'ffmpeg' not found. Files are in '", tempdir(), "'"))
+  }
   ## one individual figure with all flight tracks
-  CairoPNG("flightControl.png", width=1280, height=720, res=96)
-
+  ##CairoPNG("flightControl.png", width=1280, height=800, res=96)
   p <- autoplot(mapLatLon)
   p <- p + geom_path(data=flights,
                      aes(x=lon, y=lat, color=altitude, group=callSign),
@@ -346,12 +353,14 @@ animate.flights.2d <- function(flights, step=5) {
   p <- p + scale_colour_gradientn(colours=inferno(255))
   p <- p + xlab("longitude") + ylab("latitude")
   print(p)
-  dev.off()
+  ##dev.off()
 }
 
 #' 3D isosurface of lowest flight altitude
 #'
 #' @param flights the flights data.frame
+#' @param dem digital elevation model
+#' @param tracks logical if the individual tracks should be shown (default) or a transparent 'carpet' of the spatially interpolated lowest flight altitude.
 #' @author Joerg Steinkamp \email{joergsteinkamp@@yahoo.de}
 #' @export
 #' @import rgl
@@ -360,7 +369,7 @@ animate.flights.2d <- function(flights, step=5) {
 #' @importFrom rgdal project
 #' @importFrom sp CRS spTransform proj4string coordinates
 #' @importFrom grDevices terrain.colors
-animate.flights.3d <- function(flights) {
+animate.flights.3d <- function(flights, dem, tracks=TRUE) {
   callSign=NULL
   extent <- extent(data.frame(x=c(min(flights$lon), max(flights$lon)),
                               y=c(min(flights$lat), max(flights$lat))))
@@ -376,10 +385,14 @@ animate.flights.3d <- function(flights) {
   extent <- spTransform(extent, CRS(proj))
   extent <- extent(extent)
 
-  ## TODO: filter out helicopter, ...
+  ## TODO: filter out helicopters, historic planes, ...
 
   ## calculate a raster surface ("carpet") of the lowest flight altitude.
-  min.altitude <- min.flight.altitude(flights, extent=extent, res=1000, proj=proj, method="Gau")
+  if (!tracks) {
+    min.altitude <- min.flight.altitude(flights, extent=extent, res=1000, proj=proj, method="raw")
+    if (class(min.altitude) != "SpatialPixelsDataFrame")
+      min.altitude = as(min.altitude, "SpatialPixelsDataFrame")
+  }
 
   ## reproject lon/lat of flights data.frame
   flights.proj <- project(as.matrix(flights[c("lon", "lat")]), proj)
@@ -387,99 +400,102 @@ animate.flights.3d <- function(flights) {
   flights$lat <- flights.proj[,2]
 
   ## load a digital elevation model (DEM from SRTM data)
-  full.srtm <- raster("srtm.tif")
-  full.srtm <- projectRaster(full.srtm, crs=CRS(proj4string(min.altitude)))
-  srtm <- crop(full.srtm, extent)
+  ##full.srtm <- raster("data/srtm.tif")
+  ##full.srtm <- projectRaster(full.srtm, crs=CRS(proj4string(min.altitude)))
+  ##dem <- crop(full.srtm, extent)
 
   ## extract the coordinates and z-values for the 3D surface from the DEM
-  xy <- coordinates(srtm)
-  srtm.x <- sort(unique(xy[,1]))
-  srtm.y <- sort(unique(xy[,2]), decreasing=TRUE)
-  srtm.z <- t(as.matrix(srtm))
-  srtm.z[srtm.z==0] = NA
-  srtm.z[is.na(srtm.z)] = min(srtm.z, na.rm=TRUE)
+  xy <- coordinates(dem)
+  dem.x <- sort(unique(xy[,1]))
+  dem.y <- sort(unique(xy[,2]), decreasing=TRUE)
+  dem.z <- t(as.matrix(dem))
+  dem.z[dem.z==0] = NA
+  dem.z[is.na(dem.z)] = min(dem.z, na.rm=TRUE)
 
   ## color lookup table for DEM
-  zlim <- range(srtm.z)
+  zlim <- range(dem.z)
   zlen <- ceiling(zlim[2] - zlim[1])
 
-  srtm.col <- terrain.colors(zlen)
-  srtm.col <- srtm.col[ ceiling(srtm.z - zlim[1]) ]
+  dem.col <- terrain.colors(zlen)
+  dem.col <- dem.col[ ceiling(dem.z - zlim[1]) ]
 
-  ## eqivalent as above for altitude
-  xy <- coordinates(min.altitude)
-  alt.x <- sort(unique(xy[,1]))
-  alt.y <- sort(unique(xy[,2]), decreasing=TRUE)
-  alt.z <- as.matrix(min.altitude)
-
-  zlim <- range(c(alt.z, flights$altitude))
+  if (!tracks) {
+    ## eqivalent as above for altitude
+    alt.x <- seq(min.altitude@bbox["x", "min"] + min.altitude@grid@cellsize["x"]/2,
+                 min.altitude@bbox["x", "max"] - min.altitude@grid@cellsize["x"]/2,
+                 min.altitude@grid@cellsize["x"])
+    alt.y <- seq(min.altitude@bbox["y", "min"] + min.altitude@grid@cellsize["y"]/2,
+                 min.altitude@bbox["y", "max"] - min.altitude@grid@cellsize["y"]/2,
+                 min.altitude@grid@cellsize["x"])
+#    xy <- coordinates(min.altitude)
+#    alt.x <- sort(unique(xy[,1]))
+#    alt.y <- sort(unique(xy[,2]), decreasing=TRUE)
+    alt.z <- as.matrix(min.altitude)
+    zlim <- range(alt.z, na.rm=TRUE)
+  } else {
+    zlim <- range(flights$altitude, na.rm=TRUE)
+  }
   zlen <- ceiling(zlim[2] - zlim[1])
 
   flight.alt.col <- inferno(zlen)
-  alt.col <- flight.alt.col[ ceiling(alt.z - zlim[1]) ]
 
-  alt.alpha <- sqrt(max(alt.z)-alt.z) / sqrt(max(alt.z)-min(alt.z))/2
+  if (tracks) {
+    open3d(windowRect=c(100, 100, 1280, 1024), scale=c(1, 1, 5), FOV=1)
+    rgl.bg(color = "black")
+    surface3d(dem.x, dem.y, dem.z, color = dem.col, back = "cull")
 
-  open3d(windowRect=c(100, 100, 1280, 720), scale=c(1, 1, 5), FOV=1)
-  rgl.bg(color = "black")
-  surface3d(srtm.x, srtm.y, srtm.z, color = srtm.col, back = "cull")
+    ## both methods (for and lapply) for all flight tracks are very slow!
+    for (id in unique(flights$callSign)) {
+      f = subset(flights, callSign == id)
+      if (nrow(f) == 0)
+        next
+      lines3d(f$lon, f$lat, f$altitude, col=flight.alt.col[f$altitude], alpha=0.15, lwd=2)
+    }
 
-##   rgl.viewpoint(0, -20, fov=1)
-##   n <- 360
-##   dt <- seq(min(flights$date)+30*60, max(flights$date), length.out=n)
-##   fid <- unique(flights$callSign)
-##   for (i in 1:n) {
-##     open3d(windowRect=c(100, 100, 1280, 720), scale=c(1, 1, 5), FOV=1)
-##     rgl.bg(color = "black")
-##     surface3d(srtm.x, srtm.y, srtm.z, color = srtm.col, back = "cull")
-##     surface3d(alt.x, alt.y, alt.z, color = "white", alpha=alt.alpha, back = "cull")
-##     rgl.viewpoint(0, -25, fov=1)
-##     for (id in fid) {
-##       f <- subset(flights, date >= dt[i]-30*60 & date <= dt[i] & callSign==id)
-##       if (nrow(f)>1)
-##         lines3d(f$lon, f$lat, f$altitude, col=flight.alt.col[f$altitude], alpha=0.7, lwd=2)
-##     }
-##     par3d(userMatrix = rotationMatrix(i*pi/180, 0, 1, i*pi/180) %*% par3d("userMatrix"))
-##     rgl.snapshot(filename=sprintf("flights3d_%03d.png", i),fmt="png")
-##     rgl.close()
-##   }
+    rgl.viewpoint(0, -75, fov=1)
 
-  ## both methods (for and lapply) for all flight tracks are very slow!
-  for (id in unique(flights$callSign)) {
-    f = subset(flights, callSign == id)
-    if (nrow(f) == 0)
-      next
-    lines3d(f$lon, f$lat, f$altitude, col=flight.alt.col[f$altitude], alpha=0.15, lwd=2)
+    ## play3d(spin3d(axis = c(0, 0, 1), rpm = 2))
+    movie3d(spin3d(axis = c(0, 0, 1), rpm = 2), 30, dir=tempdir(), convert=FALSE, clean=FALSE)
+    rgl.close()
+    if (length(system2("which", "ffmpeg", stdout=TRUE))>0) {
+      system(paste0("ffmpeg -y -i ", file.path(tempdir(), "movie%03d.png"), " -s sxga -r ntsc -vcodec libx264 -pix_fmt yuv420p flightControl3D_top.mp4"))
+      system(paste0("rm ", file.path(tempdir(), "movie*.png")))
+    } else {
+      message(paste0("'ffmpeg' not found. Files are in '", tempdir(), "'"))
+    }
+  } else {
+    ## flat look with "carpet"
+    alt.col <- flight.alt.col[ ceiling(alt.z - zlim[1]) ]
+    alt.alpha <- sqrt(max(alt.z)-alt.z) / sqrt(max(alt.z)-min(alt.z))/2
+
+    open3d(windowRect=c(100, 100, 1280, 1024), scale=c(1, 1, 5), FOV=1)
+    rgl.bg(color = "black")
+    surface3d(dem.x, dem.y, dem.z, color = dem.col, back = "cull")
+
+    surface3d(alt.x, alt.y, alt.z, color = "white", alpha=0.4, back = "cull")
+
+    coords = data.frame(x=rep(alt.x, length(alt.y)), y=rep(alt.y, each=length(alt.x)), z=as.vector(alt.z))
+    e <- expand.grid(1:(length(alt.x)-1), 1:length(alt.y))
+    i1 <- apply(e,1,function(z)z[1]+length(alt.x)*(z[2]-1))
+    i2 <- i1+1
+    i3 <- i1+length(alt.x)
+    i4 <- i2+length(alt.x)
+    i <- rbind(i1,i2,i4,i3)
+    quads3d(coords$x[i], coords$y[i], coords$z[i], col="white", alpha=0.4, front="fill", back="fill")
+
+    rgl.viewpoint(0, -85, fov=1)
+
+    movie3d(spin3d(axis = c(0, 0, 1), rpm = 2), 30, dir=tempdir(), convert=FALSE, clean=FALSE)
+    rgl.close()
+    if (length(system2("which", "ffmpeg", stdout=TRUE))>0) {
+      system(paste0("ffmpeg -y -i ", file.path(tempdir(), "movie%03d.png"), " -s sxga -r ntsc -vcodec libx264 -pix_fmt yuv420p flightControl3D_flat.mp4"))
+      system(paste0("rm ", file.path(tempdir(), "movie*.png")))
+    } else {
+      message(paste0("'ffmpeg' not found. Files are in '", tempdir(), "'"))
+    }
   }
-
-##  lapply(unique(flights$callSign), function(x) {
-##    f = subset(flights, callSign==x)
-##    if (nrow(f) == 0)
-##      return(NULL)
-##    lines3d(f$lon, f$lat, f$altitude, col=flight.alt.col[f$altitude], alpha=0.15, lwd=2)
-##    return(NULL)
-##  })
-
-  rgl.viewpoint(0, -20, fov=1)
-
-  ## play3d(spin3d(axis = c(0, 0, 1), rpm = 2))
-  movie3d(spin3d(axis = c(0, 0, 1), rpm = 2), 30, dir="tmp", convert=FALSE, clean=FALSE)
-  rgl.close()
-  system("ffmpeg -i tmp/movie%03d.png -s hd720 -r ntsc -vcodec libx264 flightControl3D_top.mp4")
-  system("rm tmp/movie*.png")
-
-  ## flat look with "carpet"
-  open3d(windowRect=c(100, 100, 1280, 720), scale=c(1, 1, 5), FOV=1)
-  rgl.bg(color = "black")
-  surface3d(srtm.x, srtm.y, srtm.z, color = srtm.col, back = "cull")
-  surface3d(alt.x, alt.y, alt.z, color = "white", alpha=alt.alpha+0.3, back = "cull")
-  rgl.viewpoint(0, -85, fov=1)
-
-  movie3d(spin3d(axis = c(0, 0, 1), rpm = 2), 30, dir="tmp", convert=FALSE, clean=FALSE)
-  rgl.close()
-  system("ffmpeg -i tmp/movie%03d.png -s hd720 -r ntsc -vcodec libx264 flightControl3D_flat.mp4")
-  system("rm tmp/movie*.png")
 }
+
 #' Convert csv to RData
 #'
 #' Convert daily csv files produced by dump1080 to RData files
@@ -516,14 +532,33 @@ import <- function(dates, source.dir=".", verbose=TRUE) {
   flights = NULL
   flights.full <- data.frame()
   for (i in 1:length(dates)) {
-    fname <- paste0("data/flights_", format(dates[i], "%Y%m%d"), ".RData")
-    if (verbose)
-      print(paste(dates[i], fname))
+    fname <- file.path(source.dir, paste0("flights_", format(dates[i], "%Y%m%d"), ".RData"))
     load(fname)
+    if (verbose)
+      print(paste(dates[i], fname, nrow(flights)))
     flights.full = rbind(flights.full, flights)
   }
   return(flights.full)
 }
+
+#' @description
+#' This dataset contains unsplit flight tracks of October 30th, 2016 below 3000 meters.
+#' @title flights
+#' @name flights
+#' @docType data
+#' @author Joerg Steinkamp \email{joergsteinkamp@@yahoo.de}
+#' @keywords data
+NULL
+
+#' @description
+#' This is a Digital elevation model for the Rhein/Main region
+#' @title dem
+#' @name dem
+#' @docType data
+#' @author Joerg Steinkamp \email{joergsteinkamp@@yahoo.de}
+#' @keywords data
+NULL
+
 
 
 ##################################
@@ -531,8 +566,7 @@ import <- function(dates, source.dir=".", verbose=TRUE) {
 ##################################
 
 ## read raw data and save as RData
-#dates <- seq(strptime("2016-10-30", format="%Y-%m-%d"), strptime("2016-11-08", format="%Y-%m-%d"), 86400)
-#convert(dates, "data", "data")
+##dates <- seq(strptime("2016-10-15", format="%Y-%m-%d"), strptime("2016-11-08", format="%Y-%m-%d"), 86400)
 
 #load("data/flights_20160806.RData")
 #flights <- split.pause.callSign(flights)

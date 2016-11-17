@@ -2,4 +2,5 @@
 ^\.Rproj\.user$
 ^\.git$
 ^\.gitignore$
+FlightControl_cache
 
