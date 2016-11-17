@@ -38,7 +38,6 @@ airplanes <- function(file, raw=FALSE, min.altitude=-999, max.altitude=5000, uni
   ## only below max.altitude
   flight.pos = subset(flight.pos, altitude <= max.altitude)
 
-
   ## create a real datetime column
   flight.ids$date <- strptime(paste(flight.ids$gen.date, flight.ids$gen.time), format="%Y/%m/%d %H:%M:%S")
   flight.pos$date <- strptime(paste(flight.pos$gen.date, flight.pos$gen.time), format="%Y/%m/%d %H:%M:%S")
@@ -130,66 +129,23 @@ split.pause.callSign <- function(flights, pause.limit=900) {
   return(flights)
 }
 
-## add linear interpolated points to flight tracks
+## calculate a surface of the minimum flight height
 ##
-## @param flights the flights data.frame
-## @param res spatial resolution
-## @return a new flights data.frame with more rows, but some neglected columns
+## Interpolation methods:
+## \itemize{
+## \item{raw}{no interpolation}
+## \item{idw}{kriging see \code{\link[gstst]{krige}}}
+## \item{sph/gau}{variogram model see \code{\link[gstat]{vgm}}}
+## }
+##
+## @param flights flights data.frame as returned by
+## @param extent a spatial extent object
+## @param res target resolution
+## @param proj target projection
+## @param method interpolation method (see Details)
+## @return a interpolated SpatialPixelsDataFrame of minimum flight altitude
 ## @author Joerg Steinkamp \email{joergsteinkamp@@yahoo.de}
-add.knots <- function(flights, res) {
-  UID=NULL
-  ## add linear interpolated points to flight track in the distance of sqrt(res^2 + res^2),
-  ## if the distance is larger.
-  ## make to also work for several days by including the date in a unique ID
-  flights$UID = paste0(flights$callSign, strftime(flights$date, format="%Y%m%d"))
-
-  ## list of high resolution flight tracks
-  lhres.flights <- lapply(unique(flights$UID), function(x){
-    flights.tmp = subset(flights, UID == x)[c("lon", "lat", "date", "altitude", "callSign")]
-    flights = flights[!duplicated(flights[c("lon", "lat")]),]
-    hres.flights <- flights.tmp[1,]
-    if (nrow(flights.tmp) > 1) {
-      for (i in 2:nrow(flights.tmp)) {
-        n <- round(sqrt((flights.tmp$lon[i - 1] - flights.tmp$lon[i])^2 +
-                        (flights.tmp$lat[i - 1] - flights.tmp$lat[i])^2) / res)
-        if (n > 1) {
-          hres.flights <- rbind(hres.flights, data.frame(
-                                                lon=seq(flights.tmp$lon[i - 1], flights.tmp$lon[i], length.out=n),
-                                                lat=seq(flights.tmp$lat[i - 1], flights.tmp$lat[i], length.out=n),
-                                                date=seq(flights.tmp$date[i - 1], flights.tmp$date[i], length.out=n),
-                                                altitude=seq(flights.tmp$altitude[i - 1], flights.tmp$altitude[i], length.out=n),
-                                                callSign=flights.tmp$callSign[1])[2:n, ])
-        } else {
-          hres.flights <- rbind(hres.flights, flights.tmp[i, ])
-        }
-      }
-    }
-    return(hres.flights)
-  })
-  hres.flights <- lhres.flights[[1]]
-  for (i in 2:length(lhres.flights)) {
-    hres.flights <- rbind(hres.flights, lhres.flights[[i]])
-  }
-  return(hres.flights[!duplicated(hres.flights), ])
-}
-
-#' calculate a surface of the minimum flight height
-#'
-#' Interpolation methods:
-#' \itemize{
-#' \item{raw}{no interpolation}
-#' \item{idw}{kriging see \code{\link[gstst]{krige}}}
-#' \item{sph/gau}{variogram model see \code{\link[gstat]{vgm}}}
-#' }
-#'
-#' @param flights flights data.frame as returned by
-#' @param extent a spatial extent object
-#' @param res target resolution
-#' @param proj target projection
-#' @param method interpolation method (see Details)
-#' @return a interpolated SpatialPixelsDataFrame of minimum flight altitude
-#' @author Joerg Steinkamp \email{joergsteinkamp@@yahoo.de}
-#' @export
+## @export
 #' @import sp
 #' @import raster
 #' @importFrom gstat idw krige
@@ -208,12 +164,6 @@ min.flight.altitude <- function(flights, extent=NULL, res=NULL, proj=NULL, metho
   coordinates(grid) = ~x+y
   gridded(grid) = TRUE
   projection(grid) = CRS(proj)
-
-  ## BUG: hardcoded resolution increase of flight tracks; approx. every sqrt(2 * res^2)
-  ## Improvement/Solution: check unit of projection and scale based on center of extent
-
-  ## takes too long and no hardly any gain
-  ##flights <- add.knots(flights, 30 / 3.6e6 * res)
 
   ## reproject
   coordinates(flights) = ~lon+lat
@@ -234,24 +184,11 @@ min.flight.altitude <- function(flights, extent=NULL, res=NULL, proj=NULL, metho
   }
   altitude = altitude[is.finite(altitude$low), ]
 
-  if (method=="spline") {
-    stop("doesn't work currectly!")
-    ## http://stackoverflow.com/questions/28059182/smoothing-out-ggplot2-map
-    ##fld <- interp(x=altitude$lon, y=altitude$lat, z=altitude$min,
-    ##              duplicate="min", xo=lon, yo=lat, extrap=TRUE, linear=FALSE)
-    ##return(fld)
-
-    ##http://stackoverflow.com/questions/20848740/smoothing-surface-plot-from-matrix
-    ##mod <- gam(min ~ te(lon, lat), data = altitude)
-    ##m2 <- matrix(fitted(mod), nrow = length(lon), ncol = length(lat))
-    ##return(m2)
-  }
-
   coordinates(altitude) = ~x+y
   projection(altitude) = CRS(proj)
 
   if (method=="raw")
-    return(altitude)
+    return(as(altitude, "SpatialPixelsDataFrame"))
 
   ## from the gstat manual (https://cran.r-project.org/web/packages/gstat/vignettes/gstat.pdf)
   if (method=="idw") {
@@ -274,11 +211,6 @@ min.flight.altitude <- function(flights, extent=NULL, res=NULL, proj=NULL, metho
     min.altitude <- altitude.kriged.gau["var1.pred"]
     names(min.altitude) <- c("altitude")
     return(min.altitude)
-##  } else if (grepl("spl", tolower(method))) {
-##    altitude.fit.spl = fit.variogram(altitude.vgm, model = vgm("Spl"))
-##    altitude.kriged.spl = krige(min~1, altitude, grid, model = altitude.fit.spl)
-##    colnames(altitude.kriged.spl["var1.pred"]@data) <- "altitude"
-##    return(altitude.kriged.spl["var1.pred"])
   }
   stop(paste0("The method '", method, "' is not known/implemented."))
 }
@@ -385,14 +317,9 @@ animate.flights.3d <- function(flights, dem, tracks=TRUE) {
   extent <- spTransform(extent, CRS(proj))
   extent <- extent(extent)
 
-  ## TODO: filter out helicopters, historic planes, ...
-
   ## calculate a raster surface ("carpet") of the lowest flight altitude.
-  if (!tracks) {
+  if (!tracks)
     min.altitude <- min.flight.altitude(flights, extent=extent, res=1000, proj=proj, method="raw")
-    if (class(min.altitude) != "SpatialPixelsDataFrame")
-      min.altitude = as(min.altitude, "SpatialPixelsDataFrame")
-  }
 
   ## reproject lon/lat of flights data.frame
   flights.proj <- project(as.matrix(flights[c("lon", "lat")]), proj)
@@ -427,9 +354,6 @@ animate.flights.3d <- function(flights, dem, tracks=TRUE) {
     alt.y <- seq(min.altitude@bbox["y", "min"] + min.altitude@grid@cellsize["y"]/2,
                  min.altitude@bbox["y", "max"] - min.altitude@grid@cellsize["y"]/2,
                  min.altitude@grid@cellsize["x"])
-#    xy <- coordinates(min.altitude)
-#    alt.x <- sort(unique(xy[,1]))
-#    alt.y <- sort(unique(xy[,2]), decreasing=TRUE)
     alt.z <- as.matrix(min.altitude)
     zlim <- range(alt.z, na.rm=TRUE)
   } else {
@@ -558,35 +482,3 @@ NULL
 #' @author Joerg Steinkamp \email{joergsteinkamp@@yahoo.de}
 #' @keywords data
 NULL
-
-
-
-##################################
-### END functions ################
-##################################
-
-## read raw data and save as RData
-##dates <- seq(strptime("2016-10-15", format="%Y-%m-%d"), strptime("2016-11-08", format="%Y-%m-%d"), 86400)
-
-#load("data/flights_20160806.RData")
-#flights <- split.pause.callSign(flights)
-#animate.flights.2d(flights)
-
-## read the previously saved RData and append all to one large data.frame
-#dates <- seq(strptime("2016-08-01", format="%Y-%m-%d"), strptime("2016-08-07", format="%Y-%m-%d"), 86400)
-
-#flights.full <- split.pause.callSign(flights.full)
-#animate.flights.3d(flights.full)
-
-## ## http://stackoverflow.com/questions/22597663/r-from-spatialpointsdataframe-to-spatiallines
-## fid <- unique(flights$callSign)
-## ll <- vector("list", length(fid))
-## for (i in 1:length(fid)) {
-##   l <- Line(subset(flights, callSign==fid[i])[c("lon", "lat")])
-##   ls <- Lines(list(l),ID=fid[i])
-##   ll[[i]] = ls
-## }
-## lflights <- SpatialLines(ll, proj4string=CRS(proj))
-## rm(l, ls, ll)
-
-

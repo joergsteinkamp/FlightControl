@@ -33,19 +33,19 @@ library(FlightControl)
 And run `covert` with the recorded dates the path to where the csv files are (`source.dir`) and where to save the RData files (`target.dir`). This converts the raw CSV files above in much smaller RData files. However, allready with a tiny bit of loss, since `convert` calls `airplanes` with its default parameters. You can override this by setting `raw=TRUE` or  changing `min.altitude`/`max.altitude=99999` and/or `unit="feet"`. Setting raw to TRUE returns the data as is. Changing only the min/max altitude matches the flight IDs and flight positions and converts feet to meters, if unit isn't set to "feet". Currently only feet and meter are supported, anything else given as unit is treated as meters. 
 
 ```{r, eval=FALSE}
-dates <- seq(strptime("2016-10-15", format="%Y-%m-%d"),
-             strptime("2016-11-08", format="%Y-%m-%d"), 86400)
+dates <- seq(strptime("2016-10-24", format="%Y-%m-%d"),
+             strptime("2016-10-30", format="%Y-%m-%d"), 86400)
 convert(dates, "data", "data", max.altitude=3000)
 ```
 ```{r, echo=FALSE}
-dates <- seq(strptime("2016-10-15", format="%Y-%m-%d"),
-             strptime("2016-11-08", format="%Y-%m-%d"), 86400)
+dates <- seq(strptime("2016-10-24", format="%Y-%m-%d"),
+             strptime("2016-10-30", format="%Y-%m-%d"), 86400)
 ```
 
 Now import those .RData files and append them if desired by passing either one date or several to `import`. And since several callSigns appear several times a day, e.g. when a plane lands and then starts again, those have to be split, which is done by `split.pause.callSign` after `pause.limit` seconds (default 900).
 
 ```{r, eval=FALSE}
-flights <- import(dates[16], source.dir = "data", verbose=FALSE)
+flights <- import(dates[7], source.dir = "data", verbose=FALSE)
 flights <- split.pause.callSign(flights)
 ```
 ```{r, echo=FALSE}
@@ -67,7 +67,7 @@ animate.flights.2d(flights)
 
 For the terrain I prepared a digital elevation model (`dem`) based on the [Shuttle Radar Topographic Mission (SRTM)](http://www2.jpl.nasa.gov/srtm/), that is needed by `animate.flights.3d` as an parameter. If you want to use  the package for another region, you need to get and prepare your own DEM data.
 
-First filter out those flights not to include in the analysis, e.g. remove those where the callSign starts with 'DM', or include only those with more than 10 nodes.
+First filter out those flights not to include in the analysis, e.g. remove those where the callSign starts with 'DM', or include only those with more than 10 nodes (logged positions).
 ```{r}
 flights <- subset(flights, !grepl("^DM", callSign))
 nodes <- table(flights$callSign)
@@ -78,6 +78,11 @@ There are two possible OpenGL 3D plots, one with individual flight tracks (takes
 
 ```{r}
 animate.flights.3d(flights, dem)
+```
+
+For the transparent carpet several days should be used to achieve a smoother surface, which is done in the following example (Oct. 24 - 30, 2016). And several more filters had to be applied: e.g. a few logged position were in Asia or America, which can not be true.
+
+```{r}
 animate.flights.3d(flights, dem, tracks = FALSE)
 ```
 
