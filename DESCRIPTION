@@ -28,6 +28,8 @@ Imports:
 RoxygenNote: 5.0.1
 Suggests: 
     Cairo,
+    ggplot2,
     knitr,
+    OpenStreetMap,
     rmarkdown
 VignetteBuilder: knitr

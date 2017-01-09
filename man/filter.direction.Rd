@@ -4,12 +4,12 @@
 \alias{filter.direction}
 \title{Applies a filter by total altitude}
 \usage{
-filter.direction(flights, direction = "xxx", threshold = 500)
+filter.direction(flights, direction = NA, threshold = 500)
 }
 \arguments{
 \item{flights}{the flights data.frame}
 
-\item{direction}{character, either"a(scending)", "d(escending)" or "p(assing)". For anything else all are returned in a list}
+\item{direction}{character, either"a(scending)", "d(escending)" or "p(assing)". For anything else the full flights data.frame is returned including a new column `dz`.}
 
 \item{threshold}{absolute treshold value to distinguish between the the previous classes.}
 }

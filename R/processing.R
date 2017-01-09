@@ -62,13 +62,13 @@ filter.position <- function(flights, west=-180, east=180, south=-90, north=90, l
 #' Creates subsets, if the plane is descending, ascending or passing by, based on a threshold value of total altitude change
 #'
 #' @param flights the flights data.frame
-#' @param direction character, either"a(scending)", "d(escending)" or "p(assing)". For anything else all are returned in a list
+#' @param direction character, either"a(scending)", "d(escending)" or "p(assing)". For anything else the full flights data.frame is returned including a new column `dz`.
 #' @param threshold absolute treshold value to distinguish between the the previous classes.
 #' @return new flights data.frame
 #' @export
 #' @importFrom plyr ddply .
 #' @author Joerg Steinkamp \email{joergsteinkamp@@yahoo.de}
-filter.direction <- function(flights, direction="xxx", threshold=500) {
+filter.direction <- function(flights, direction=NA, threshold=500) {
   summarise=dz=NULL
   flights$dz = 0
   for (callSign in unique(flights$callSign)) {
@@ -76,7 +76,11 @@ filter.direction <- function(flights, direction="xxx", threshold=500) {
     flights$dz[callSign.id[2:length(callSign.id)]] = diff(flights$altitude[callSign.id])
   }
   rm(callSign, callSign.id)
-  flights$callSign = gsub("\\?", "_", flights$callSign)
+
+  if (!(grepl("^p", direction) || grepl("^a", direction) || grepl("^d", direction)))
+    return(flights)
+
+  ## flights$callSign = gsub("\\?", "_", flights$callSign)
   total.dz <- ddply(flights[,c("callSign", "dz")], .(callSign), summarise, dz=sum(dz))
 
   pass.flights <- subset(flights, callSign %in% total.dz$callSign[abs(total.dz$dz) < abs(threshold)])
@@ -84,12 +88,10 @@ filter.direction <- function(flights, direction="xxx", threshold=500) {
   dec.flights  <- subset(flights, callSign %in% total.dz$callSign[total.dz$dz <= -abs(threshold)])
   if (grepl("^p", direction)) {
     return(pass.flights)
-  } else if (grepl("a", direction)) {
+  } else if (grepl("^a", direction)) {
     return(asc.flights)
-  } else if (grepl("d", direction)) {
+  } else if (grepl("^d", direction)) {
     return(dec.flights)
-  } else {
-    return(list(pass=pass.flights, ascend=asc.flights, decend=dec.flights))
   }
 }
 

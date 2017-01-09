@@ -115,10 +115,10 @@ map.flights <- function(flights) {
 Then create a map of a day with mainly ascending (2016-10-28) and descending (2016-10-30) airplanes above Mainz with the above function.
 
 ```{r, fig.width=7, fig.height=5}
-map <- map.flights(subset(flights.lst[["ascend"]], date < as.POSIXlt("2016-10-29 00:00:00")))
-map + labs(title="Ascending (2016-10-28)")
-map <- map.flights(subset(flights.lst[["decend"]], date > as.POSIXlt("2016-10-30 00:00:00")))
-map + labs(title="Decending (2016-10-30)")
+#map <- map.flights(subset(flights.lst[["ascend"]], date < as.POSIXlt("2016-10-29 00:00:00")))
+#map + labs(title="Ascending (2016-10-28)")
+#map <- map.flights(subset(flights.lst[["decend"]], date > as.POSIXlt("2016-10-30 00:00:00")))
+#map + labs(title="Decending (2016-10-30)")
 suppressMessages(dev.off())
 ```
 
@@ -127,7 +127,7 @@ suppressMessages(dev.off())
 For the terrain I prepared a digital elevation model (`dem`) based on the [Shuttle Radar Topographic Mission (SRTM)](http://www2.jpl.nasa.gov/srtm/), that is needed by `animate.flights.3d` as an parameter. If you want to use  the package for another region, you need to get and prepare your own DEM data.
 
 First filter out those flights not to include in the analysis, e.g. remove those where the callSign starts with 'DM', or include only those with more than 10 nodes (logged positions).
-```{r}
+```{r, eval=FALSE}
 flights <- subset(flights, !grepl("^DM", callSign))
 nodes <- table(flights$callSign)
 flights <- subset(flights, flights$callSign %in% names(nodes[nodes>10]))
@@ -136,13 +136,13 @@ flights <- subset(flights, flights$callSign %in% names(nodes[nodes>10]))
 There are two possible OpenGL 3D plots, one with individual flight tracks (takes very long) and one with a transparent 'carpet' of the minimum flight altitude remapped on a 1km grid (only a bit faster).
 
 ```{r, eval=FALSE}
-animate.flights.3d(flights, dem)
+##animate.flights.3d(flights, dem)
 ```
 
 For the transparent carpet several days should be used to achieve a smoother surface, which is done in the following example (Oct. 24 - 30, 2016). And several more filters had to be applied: e.g. a few logged position were in Asia or America, which can not be true.
 
 ```{r, eval=FALSE}
-animate.flights.3d(flights, dem, tracks = FALSE)
+##animate.flights.3d(flights, dem, tracks = FALSE)
 ```
 
 For the video the same as above for the 2D movie is valid. If the commandline tool 'ffmpeg' is not available the pictures ar in R's temporyry folder. 
