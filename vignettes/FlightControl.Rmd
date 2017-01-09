@@ -66,6 +66,8 @@ flights.lst <- filter.direction(flights)
 
 ## Visualization
 
+This is not part of the package, since it depends on a lot of other packages, which do not necessarily need to be installed.
+
 ### Flat 2D maps
 
 Below  is a function to create a map with the flight-tracks above an [OpenStreetMap](https://www.openstreetmap.org). The R package `OpenStreetMap` depends on rJava, which I experienced some trouble with in configuring. Therefore I pulled that dependecy out of my FlightControl package and list it here as example.
@@ -117,7 +119,7 @@ map <- map.flights(subset(flights.lst[["ascend"]], date < as.POSIXlt("2016-10-29
 map + labs(title="Ascending (2016-10-28)")
 map <- map.flights(subset(flights.lst[["decend"]], date > as.POSIXlt("2016-10-30 00:00:00")))
 map + labs(title="Decending (2016-10-30)")
-dev.off()
+suppressMessages(dev.off())
 ```
 
 ### 3D with rgl

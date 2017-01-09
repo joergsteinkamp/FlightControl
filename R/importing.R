@@ -89,6 +89,7 @@ airplanes <- function(file, raw=FALSE, min.altitude=-999, max.altitude=999999, u
     if (any(diff(fpos$date[fpos$callSign == id]) > 1800)) {
       flights.tmp <- subset(fpos, callSign == id)
       newCallSign <- flights.tmp$callSign
+      tid <- which(diff(flights.tmp$date) > 1800)
       for (i in 1:length(tid)) {
         if (i != 1 && i != length(tid)) {
           newCallSign[(tid[i-1]+1):tid[i]] = paste0(id, letters[i+1])
