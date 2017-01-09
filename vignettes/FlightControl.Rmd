@@ -54,19 +54,15 @@ data(flights)
 flights <- split.pause.callSign(flights)
 ```
 
-Apply some filters:
-
-1. filter out unrealistic coordinates and too short flight tracks. 
-2. plit the flights data.frame into a list of three data.frames with ascending, descending flights and flights not changing their absolute altitude exceeding a threshold of 500m.
+Apply some filters to delete unrealistic coordinates and too short flight tracks (less than 10 nodes). 
 
 ```{r}
-flights <- filter.position(flights, west=3, east=13, south=45, north=55,length = 10)
-flights.lst <- filter.direction(flights)
+flights <- filter.position(flights, west=0, east=15, south=45, north=55,length = 10)
 ```
 
 ## Visualization
 
-This is not part of the package, since it depends on a lot of other packages, which do not necessarily need to be installed.
+This is not part of the package, since it depends on a lot of other packages, which do not necessarily need to be installed. Therefore, the following code is not executed as part of this vignette, just listed as example code!
 
 ### Flat 2D maps
 
@@ -112,25 +108,25 @@ map.flights <- function(flights) {
 }
 ```
 
-Then create a map of a day with mainly ascending (2016-10-28) and descending (2016-10-30) airplanes above Mainz with the above function.
+Then create a map of one day with ascending (2016-10-28) and one day with descending (2016-10-30) airplanes above Mainz with the above function.
 
 ```{r, fig.width=7, fig.height=5}
-#map <- map.flights(subset(flights.lst[["ascend"]], date < as.POSIXlt("2016-10-29 00:00:00")))
-#map + labs(title="Ascending (2016-10-28)")
-#map <- map.flights(subset(flights.lst[["decend"]], date > as.POSIXlt("2016-10-30 00:00:00")))
-#map + labs(title="Decending (2016-10-30)")
-suppressMessages(dev.off())
+flights.asc <- filter.direction(subset(flights, date < as.POSIXlt("2016-10-28 24:00:00")), direction="asc")
+flights.dec <- filter.direction(subset(flights, date > as.POSIXlt("2016-10-30 00:00:00")), direction="dec")
+map <- map.flights(flights.asc)
+map + labs(title="Ascending (2016-10-28)")
+map <- map.flights(flights.dec)
+map + labs(title="Decending (2016-10-30)")
+dev.off()
 ```
 
 ### 3D with rgl
 
-For the terrain I prepared a digital elevation model (`dem`) based on the [Shuttle Radar Topographic Mission (SRTM)](http://www2.jpl.nasa.gov/srtm/), that is needed by `animate.flights.3d` as an parameter. If you want to use  the package for another region, you need to get and prepare your own DEM data.
+For the terrain I prepared a digital elevation model (`dem`) based on the [Shuttle Radar Topographic Mission (SRTM)](http://www2.jpl.nasa.gov/srtm/), which is needed as ground surface. If you want to use  the package for another region, you need to get and prepare your own DEM data.
 
-First filter out those flights not to include in the analysis, e.g. remove those where the callSign starts with 'DM', or include only those with more than 10 nodes (logged positions).
+First filter out those flights not to include in the analysis, e.g. remove those where the callSign starts with 'DM' (local flight tracks at low altitude).
 ```{r, eval=FALSE}
 flights <- subset(flights, !grepl("^DM", callSign))
-nodes <- table(flights$callSign)
-flights <- subset(flights, flights$callSign %in% names(nodes[nodes>10]))
 ```
 
 There are two possible OpenGL 3D plots, one with individual flight tracks (takes very long) and one with a transparent 'carpet' of the minimum flight altitude remapped on a 1km grid (only a bit faster).

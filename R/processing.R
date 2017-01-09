@@ -9,7 +9,7 @@ split.pause.callSign <- function(flights, pause.limit=900) {
   flights.lst <- lapply(unique(flights$callSign), function(x) {
     callSign=NULL
     f  <- subset(flights, callSign == x)
-    dt <- diff(f$date)
+    dt <- as.double(diff(f$date), units="secs")
     sp <- which(dt > pause.limit)
     if (length(sp) == 0)
       return(f)
@@ -21,6 +21,7 @@ split.pause.callSign <- function(flights, pause.limit=900) {
         f$callSign[(sp[i - 1] + 1):sp[i]] = paste0(f$callSign[(sp[i - 1] + 1):sp[i]], "_", ransuff)
       }
       if (i == length(sp)) {
+        ransuff <- paste0(sample(c(letters, LETTERS, as.character(0:9)), 6, replace=TRUE), collapse="")
         f$callSign[(sp[i] + 1):nrow(f)] = paste0(f$callSign[(sp[i] + 1):nrow(f)], "_", ransuff)
       }
     }

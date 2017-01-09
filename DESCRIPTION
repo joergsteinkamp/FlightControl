@@ -17,19 +17,18 @@ Depends:
     R (>= 2.11.0)
 Imports:
     gstat,
-    methods,
     plyr,
     raster,
-    rgdal,
-    rgl,
     sp,
-    utils,
-    viridis
+    utils
 RoxygenNote: 5.0.1
 Suggests: 
     Cairo,
     ggplot2,
     knitr,
     OpenStreetMap,
-    rmarkdown
+    rgdal,
+    rgl,
+    rmarkdown,
+    viridis
 VignetteBuilder: knitr
