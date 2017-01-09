@@ -11,6 +11,8 @@ vignette: >
 
 ## Get the raw data
 
+This is only relevant, if you intent to use your own recorded flight tracks. Otherwise you cal jump down to section "Get it into R".
+
 To capture the data, you need a SDR-RTL dongle and the software [dump1090](https://github.com/antirez/dump1090). Compile it and run the command in a terminal shell
 ```{bash, eval=FALSE}
 ./dump1090 --aggressive --quiet --net
@@ -30,37 +32,92 @@ Load the package:
 library(FlightControl)
 ```
 
-And run `covert` with the recorded dates the path to where the csv files are (`source.dir`) and where to save the RData files (`target.dir`). This converts the raw CSV files above in much smaller RData files. However, allready with a tiny bit of loss, since `convert` calls `airplanes` with its default parameters. You can override this by setting `raw=TRUE` or  changing `min.altitude`/`max.altitude=99999` and/or `unit="feet"`. Setting raw to TRUE returns the data as is. Changing only the min/max altitude matches the flight IDs and flight positions and converts feet to meters, if unit isn't set to "feet". Currently only feet and meter are supported, anything else given as unit is treated as meters. 
+And run `covert` with the recorded dates the path to where the csv files are (`source.dir`) and where to save the RData files (`target.dir`). This converts the raw CSV files above in much smaller RData files. However, allready with a tiny bit of loss, since `convert` calls `airplanes` with its default parameters. You can override this by setting `raw=TRUE` or  changing `min.altitude`/`max.altitude` and/or `unit="feet"`. Setting raw to TRUE returns the data as is. Changing only the min/max altitude matches the flight IDs and flight positions and converts feet to meters, if unit isn't set to "feet". Currently only feet and meter are supported, anything else given as unit is treated as meters. 
 
 ```{r, eval=FALSE}
-dates <- seq(strptime("2016-10-24", format="%Y-%m-%d"),
-             strptime("2016-10-30", format="%Y-%m-%d"), 86400)
+dates <- c(strptime("2016-10-28", format="%Y-%m-%d"),
+           strptime("2016-10-30", format="%Y-%m-%d"))
 convert(dates, "data", "data", max.altitude=3000)
-```
-```{r, echo=FALSE}
-dates <- seq(strptime("2016-10-24", format="%Y-%m-%d"),
-             strptime("2016-10-30", format="%Y-%m-%d"), 86400)
 ```
 
 Now import those .RData files and append them if desired by passing either one date or several to `import`. And since several callSigns appear several times a day, e.g. when a plane lands and then starts again, those have to be split, which is done by `split.pause.callSign` after `pause.limit` seconds (default 900).
 
 ```{r, eval=FALSE}
-flights <- import(dates[7], source.dir = "data", verbose=FALSE)
+flights <- import(dates, source.dir = "data", verbose=FALSE)
 flights <- split.pause.callSign(flights)
 ```
-```{r, echo=FALSE}
+
+Or as done here use the built in dataset.
+
+```{r}
 data(flights)
 flights <- split.pause.callSign(flights)
 ```
 
-## Images and animations
+Apply some filters:
+
+1. filter out unrealistic coordinates and too short flight tracks. 
+2. plit the flights data.frame into a list of three data.frames with ascending, descending flights and flights not changing their absolute altitude exceeding a threshold of 500m.
+
+```{r}
+flights <- filter.position(flights, west=3, east=13, south=45, north=55,length = 10)
+flights.lst <- filter.direction(flights)
+```
+
+## Visualization
 
 ### Flat 2D maps
 
-I prefer CairoPNG, since it renders fonts much better than the default R device. However, if Cairo isn't available it falls back to the standard png. The video `flightControl2D.mp4` is saved in the current working directory and the individual files are delete, if the commandline tool ffmpeg is available. However, if `ffmpeg` is not available the files will be kept in the temporary R directory, which can be derived via `tempdir()`.
+Below  is a function to create a map with the flight-tracks above an [OpenStreetMap](https://www.openstreetmap.org). The R package `OpenStreetMap` depends on rJava, which I experienced some trouble with in configuring. Therefore I pulled that dependecy out of my FlightControl package and list it here as example.
+```{r}
+suppressPackageStartupMessages(require(ggplot2))
+suppressPackageStartupMessages(require(OpenStreetMap))
+suppressPackageStartupMessages(require(viridis))
+suppressPackageStartupMessages(require(raster))
+#' Map of recorded flight tracks
+#'
+#' Creates a map of flight tracks with an underlying OpenStreetMap layer.
+#'
+#' @param flights the flights data.frame
+#' @return ggplot2 object
+#' @export
+#' @author Joerg Steinkamp \email{joergsteinkamp@@yahoo.de}
+#' @import OpenStreetMap
+#' @importFrom ggplot2 autoplot aes geom_path annotate scale_colour_gradientn xlab ylab
+#' @importFrom viridis inferno
+#' @importFrom raster extent
+map.flights <- function(flights) {
+  lon=lat=altitude=callSign=NULL
+  extent <- extent(x=c(min(flights$lon), max(flights$lon)),
+                   y=c(min(flights$lat), max(flights$lat)))
+  extent@xmin <- extent@xmin - (extent@xmax-extent@xmin) * 0.05
+  extent@xmax <- extent@xmax + (extent@xmax-extent@xmin) * 0.05
+  extent@ymin <- extent@ymin - (extent@ymax-extent@ymin) * 0.05
+  extent@ymax <- extent@ymax + (extent@ymax-extent@ymin) * 0.05
+
+  ## retrieve the OpenSteetMap data and reproject it
+  map <- openmap(c(extent@ymax, extent@xmin), c(extent@ymin, extent@xmax),
+                 type = "apple-iphoto", minNumTiles=10)
+  mapLatLon <- openproj(map)
+
+  p <- autoplot(mapLatLon)
+  p <- p + geom_path(data=flights,
+                     aes(x=lon, y=lat, color=altitude, group=callSign),
+                     alpha=0.5, size=0.8)
+  p <- p + scale_colour_gradientn(colours=inferno(255))
+  p <- p + xlab("longitude") + ylab("latitude")
+  return(p)
+}
+```
+
+Then create a map of a day with mainly ascending (2016-10-28) and descending (2016-10-30) airplanes above Mainz with the above function.
 
 ```{r, fig.width=7, fig.height=5}
-animate.flights.2d(flights)
+map <- map.flights(subset(flights.lst[["ascend"]], date < as.POSIXlt("2016-10-29 00:00:00")))
+map + labs(title="Ascending (2016-10-28)")
+map <- map.flights(subset(flights.lst[["decend"]], date > as.POSIXlt("2016-10-30 00:00:00")))
+map + labs(title="Decending (2016-10-30)")
+dev.off()
 ```
 
 ### 3D with rgl
@@ -76,13 +133,13 @@ flights <- subset(flights, flights$callSign %in% names(nodes[nodes>10]))
 
 There are two possible OpenGL 3D plots, one with individual flight tracks (takes very long) and one with a transparent 'carpet' of the minimum flight altitude remapped on a 1km grid (only a bit faster).
 
-```{r}
+```{r, eval=FALSE}
 animate.flights.3d(flights, dem)
 ```
 
 For the transparent carpet several days should be used to achieve a smoother surface, which is done in the following example (Oct. 24 - 30, 2016). And several more filters had to be applied: e.g. a few logged position were in Asia or America, which can not be true.
 
-```{r}
+```{r, eval=FALSE}
 animate.flights.3d(flights, dem, tracks = FALSE)
 ```
 

@@ -9,17 +9,16 @@ Author: Joerg Steinkamp
 Maintainer: Joerg Steinkamp <joergsteinkamp@yahoo.de>
 URL: https://github.com/joergsteinkamp/FlightControl
 BugReports: https://github.com/joergsteinkamp/FlightControl/issues
-Description: Visualizes flight tracks recorded by dump1080.
+Description: Processes and visualizes flight tracks recorded by dump1080.
 License: GPL | file LICENSE
 Encoding: UTF-8
 LazyData: true
 Depends:
     R (>= 2.11.0)
 Imports:
-    ggplot2,
     gstat,
     methods,
-    OpenStreetMap,
+    plyr,
     raster,
     rgdal,
     rgl,
