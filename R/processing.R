@@ -1,11 +1,13 @@
-#' split the callSign by a temporal break
+#' rename the callSign at a temporal break
+#'
+#' A random string of six characters is attached to the callSign each time it appears again after more than `pause.limit` seconds.
 #'
 #' @param flights the flights data.frame
 #' @param pause.limit which temporal delta time should be considered as new flight
 #' @return new flights data.frame
 #' @export
 #' @author Joerg Steinkamp \email{joergsteinkamp@@yahoo.de}
-split.pause.callSign <- function(flights, pause.limit=900) {
+breakCallSign <- function(flights, pause.limit=900) {
   flights.lst <- lapply(unique(flights$callSign), function(x) {
     callSign=NULL
     f  <- subset(flights, callSign == x)
@@ -47,7 +49,7 @@ split.pause.callSign <- function(flights, pause.limit=900) {
 #' @return new flights data.frame
 #' @export
 #' @author Joerg Steinkamp \email{joergsteinkamp@@yahoo.de}
-filter.position <- function(flights, west=-180, east=180, south=-90, north=90, length=1) {
+FlightsPositionSubset <- function(flights, west=-180, east=180, south=-90, north=90, length=1) {
   lon=lat=NULL
   flights <- subset(flights, lon > west)
   flights <- subset(flights, lon < east)
@@ -69,7 +71,7 @@ filter.position <- function(flights, west=-180, east=180, south=-90, north=90, l
 #' @export
 #' @importFrom plyr ddply .
 #' @author Joerg Steinkamp \email{joergsteinkamp@@yahoo.de}
-filter.direction <- function(flights, direction=NA, threshold=500) {
+flightsDirectionSplit <- function(flights, direction=NA, threshold=500) {
   summarise=dz=NULL
   flights$dz = 0
   for (callSign in unique(flights$callSign)) {
@@ -96,88 +98,205 @@ filter.direction <- function(flights, direction=NA, threshold=500) {
   }
 }
 
-## calculate a surface of the minimum flight height
-##
-## Interpolation methods:
-## \itemize{
-## \item{raw}{no interpolation}
-## \item{idw}{kriging see \code{\link[gstst]{krige}}}
-## \item{sph/gau}{variogram model see \code{\link[gstat]{vgm}}}
-## }
-##
-## @param flights flights data.frame as returned by
-## @param extent a spatial extent object
-## @param res target resolution
-## @param proj target projection
-## @param method interpolation method (see Details)
-## @return a interpolated SpatialPixelsDataFrame of minimum flight altitude
-## @author Joerg Steinkamp \email{joergsteinkamp@@yahoo.de}
-## @export
+#' apply a function on al flight nodes per gridcell
+#'
+#' @param data the flights data.frame (at least with column names "lon", "lat" and "altitude")
+#' @param FUN function to apply
+#' @param col.names column names of the flights data.frame to use 1st for x-coordinate, 2nd for y-coordinate and 3rd for z-coordinate
+#' @param proj.in proj4string: projection of the input flights data.frame
+#' @param proj.out proj4string: projection of the output
+#' @param res.out output resulution in the unit of proj.out
+#' @param ... further parameters passed to FUN
+#' @return a SpatialPixelsDataFrame
+#' @export
 #' @import sp
 #' @import raster
-#' @importFrom gstat idw krige
-### This resulted somehow in warnings during R CMD check
-### @importFrom sp coordinates gridded spTransform proj4string CRS GridTopology as.SpatialPolygons.GridTopology over bbox
-### @importFrom raster projection
-#' @importFrom gstat variogram fit.variogram vgm
-min.flight.altitude <- function(flights, extent=NULL, res=NULL, proj=NULL, method="raw") {
-  lon=lat=NULL
-  x <- seq(floor(extent@xmin / res) * res,
-           ceiling(extent@xmax / res) * res, res)
-  y <- seq(ceiling(extent@ymax / res) * res,
-           floor(extent@ymin / res) * res, -res)
+#' @author Joerg Steinkamp \email{joergsteinkamp@@yahoo.de}
+#' @examples
+#' library(raster)
+#' extent <- extent(c(7.25, 8.5, 49.5, 50.2))
+#' N <- 750
+#' set.seed(987654)
+#' data <- data.frame(lon=rbeta(N, 5, 2) * (extent@xmax - extent@xmin) + extent@xmin,
+#'                    lat=rbeta(N, 2.5, 2.5) * (extent@ymax - extent@ymin) + extent@ymin)
+#' data$altitude = (data$lon - 7.9)^3 - 3 * (data$lon - 7.9) * (data$lat- 50)^2
+#' fgrid = gridFlights(data, min)
+#' plot(fgrid)
+gridFlights <- function(data, FUN, col.names=c("lon", "lat", "altitude"),
+                         proj.in="+init=epsg:4326",
+                         proj.out="+proj=utm +zone=32 +ellps=WGS84 +dataum=WGS84 +units=m +no_defs",
+                         res.out=1000,
+                         ...) {
 
-  grid <- data.frame(x=rep(x, length(y)), y=rep(y, each=length(x)))
-  coordinates(grid) = ~x+y
-  gridded(grid) = TRUE
-  projection(grid) = CRS(proj)
-
-  ## reproject
-  coordinates(flights) = ~lon+lat
-  projection(flights) = CRS("+init=epsg:4326")
-  flights <- spTransform(flights, CRS(proj4string(grid)))
-
-  ## minimum altitude in raster -> new spatial object (altitude)
-  ## taken from http://stackoverflow.com/questions/24702437/in-r-how-to-average-spatial-points-data-over-spatial-grid-squares
-  gt <- GridTopology(bbox(flights)[,1], cellsize=c(res, res), cells.dim=c(length(x), length(y)))
-  polys <- as.SpatialPolygons.GridTopology(gt)
-  proj4string(polys) <- CRS(proj)
-
-  altitude <- as.data.frame(grid)
-  altitude$low = NA
-  ## how to change this to an apply call?
-  for (i in 1:length(polys)) {
-    altitude$low[i] = min(flights$altitude[which(!is.na(over(flights, polys[i])))], na.rm=TRUE)
+  if (col.names[1] != "lon") {
+    df.cnames <- colnames(data)
+    i <- which(df.cnames == col.names[1])
+    df.cnames[i] = "lon"
+    colnames(data) <- df.cnames
   }
-  altitude = altitude[is.finite(altitude$low), ]
-
-  coordinates(altitude) = ~x+y
-  projection(altitude) = CRS(proj)
-
-  if (method=="raw")
-    return(as(altitude, "SpatialPixelsDataFrame"))
-
-  ## from the gstat manual (https://cran.r-project.org/web/packages/gstat/vignettes/gstat.pdf)
-  if (method=="idw") {
-    altitude.idw <- idw(low~1, altitude, grid)
-    min.altitude <- altitude.idw["var1.pred"]
-    names(min.altitude) <- c("altitude")
-    return(altitude.idw["var1.pred"])
+  if (col.names[2] != "lat") {
+    df.cnames <- colnames(data)
+    i <- which(df.cnames == col.names[2])
+    df.cnames[i] = "lat"
+    colnames(data) <- df.cnames
+  }
+  if (col.names[3] != "altitude") {
+    df.cnames <- colnames(data)
+    i <- which(df.cnames == col.names[3])
+    df.cnames[i] = "altitude"
+    colnames(data) <- df.cnames
   }
 
-  altitude.vgm = variogram(low~1, altitude)
-  if (grepl("sph", tolower(method))) {
-    altitude.fit.sph = fit.variogram(altitude.vgm, model = vgm("Sph"))
-    altitude.kriged.sph = krige(low~1, altitude, grid, model = altitude.fit.sph)
-    min.altitude <- altitude.kriged.sph["var1.pred"]
-    names(min.altitude) <- c("altitude")
-    return(min.altitude)
-  } else if (grepl("gau", tolower(method))) {
-    altitude.fit.gau = fit.variogram(altitude.vgm, model = vgm("Gau"))
-    altitude.kriged.gau = krige(low~1, altitude, grid, model = altitude.fit.gau)
-    min.altitude <- altitude.kriged.gau["var1.pred"]
-    names(min.altitude) <- c("altitude")
-    return(min.altitude)
+  if (!is.function(FUN))
+    stop("'FUN' is not a function!")
+
+  ## reproject input data.frame
+  coordinates(data) <- ~lon+lat
+  projection(data) <- CRS(proj.in)
+  data <- spTransform(data, CRS(proj.out))
+
+  ## create the underlying grid coordinates
+  x <- seq(floor(extent(data)@xmin / res.out) * res.out - res.out / 2,
+           ceiling(extent(data)@xmax / res.out) * res.out + res.out / 2, res.out)
+  y <- seq(ceiling(extent(data)@ymax / res.out) * res.out + res.out / 2,
+           floor(extent(data)@ymin / res.out) * res.out - res.out / 2, -res.out)
+
+  ## convert input back to data.frame
+  data = as.data.frame(data)
+
+  ## loop over all gridcells, selecting the
+  data.lst = lapply(x[1:(length(x)-1)], function(x) {
+    x.id <- which(data$lon > x & data$lon <= x + res.out)
+    if (length(x.id) == 0) {
+      return(data.frame(x=x + res.out/2, y=y[1:(length(y)-1)] + diff(y)/2, altitude=NA))
+    } else {
+      data.tmp = data[x.id, ]
+      data.tmp.lst = lapply(y[1:(length(y)-1)], function(y) {
+        y.id <- which(data.tmp$lat < y & data.tmp$lat >= y - res.out)
+        if (length(y.id) == 0) {
+          return(data.frame(x=x + res.out/2, y=y - res.out/2, altitude=NA))
+        } else {
+          alt <- FUN(data.tmp$altitude[y.id], ...)
+          ## return(data.frame(x=x + res.out/2, y=y - res.out/2, altitude=min(data.tmp$altitude[y.id])))
+          return(data.frame(x=x + res.out/2, y=y - res.out/2, altitude=alt))
+        }
+      })
+      return(data.tmp.lst)
+    }
+  })
+  ## loop over the list
+  new.data = data.frame()
+  for (i in 1:length(data.lst)) {
+    if (is.data.frame(data.lst[[i]])) {
+      new.data = rbind(new.data, data.lst[[i]])
+    } else if (is.list(data.lst[[i]])) {
+      for (j in 1:length(data.lst[[i]])) {
+        if (is.data.frame(data.lst[[i]][[j]])) {
+          new.data = rbind(new.data, data.lst[[i]][[j]])
+        } else {
+          stop("BUG: This should not have happened!")
+        }
+      }
+    } else {
+      stop("BUG: This should not have happened!")
+    }
   }
-  stop(paste0("The method '", method, "' is not known/implemented."))
+  ## new.data = new.data[complete.cases(new.data), ]
+
+  coordinates(new.data) = ~x+y
+  projection(new.data) = CRS(proj.out)
+  return(as(new.data, "SpatialPixelsDataFrame"))
+}
+
+#' Spatial interpolation
+#'
+#' @param data a SpatialPixelsDataFrame
+#' @param method interpolation method. One of 'loess' (default), 'gam', 'gau' or 'sph'
+#' @param k if method='gam' parameter for the smooth term in te
+#' @param ... further parameters passed on to 'loess'.
+#' @return a SpatialPixelsDataFrame
+#' @export
+#' @import sp
+#' @import raster
+#' @importFrom methods as
+#' @importFrom stats loess
+#' @author Joerg Steinkamp \email{joergsteinkamp@@yahoo.de}
+#' @examples
+#' require(raster)
+#' extent <- extent(c(7.25, 8.5, 49.5, 50.2))
+#' N <- 750
+#' set.seed(987654)
+#' data <- data.frame(lon=rbeta(N, 5, 2) * (extent@xmax - extent@xmin) + extent@xmin,
+#'                    lat=rbeta(N, 2.5, 2.5) * (extent@ymax - extent@ymin) + extent@ymin)
+#' data$altitude = (data$lon - 7.9)^3 - 3 * (data$lon - 7.9) * (data$lat- 50)^2
+#' fgrid = gridFlights(data, min)
+#' res <- smoothFlightsGrid(fgrid, "loess")
+#' names(res) <- "loess"
+#' res2 <- smoothFlightsGrid(fgrid, "gam")
+#' res@data$gam = res2@data$altitude
+#' res2 <- smoothFlightsGrid(fgrid, "gau")
+#' res@data$gau = res2@data$altitude
+#' res2 <- smoothFlightsGrid(fgrid, "sph")
+#' res@data$sph = res2@data$altitude
+#' spplot(res)
+smoothFlightsGrid <- function(data, method="loess", k=5, ...) {
+  ## TODO: check input data formats
+  ## TODO: pass on ... to te in gam-method
+
+  ## create the output grid
+  x <- seq(data@bbox["x", "min"] + data@grid@cellsize["x"] / 2,
+           data@bbox["x", "max"] - data@grid@cellsize["x"] / 2,
+           data@grid@cellsize["x"])
+  y <- seq(data@bbox["y", "max"] - data@grid@cellsize["x"] / 2,
+           data@bbox["y", "min"] + data@grid@cellsize["x"] / 2,
+           -data@grid@cellsize["y"])
+  ogrid <- expand.grid(list(x=x, y=y))
+
+  p.df <- as.data.frame(data)
+  p.df <- subset(p.df, is.finite(p.df$altitude))
+  ## default loess spline interpolation
+  if (method == "loess") {
+    loess.mod <- loess(altitude ~ x*y, data=p.df, ...)
+    pred <- predict(loess.mod, newdata=ogrid)
+    data$altitude = as.vector(t(pred))
+    return(data)
+    ## gam interpolation
+  } else if (method == "gam") {
+    if (!requireNamespace("mgcv", quietly = TRUE))
+      stop("Package 'mgcv' not available! Method 'gam' not possible")
+    gam.mod <- eval(parse(text=paste0("mgcv::gam(altitude ~ te(x, y, k=", k, "), data = p.df)")))
+    pred <- predict(gam.mod, newdata=ogrid)
+    data$altitude = as.vector(t(matrix(pred,c(length(x), length(y)))))
+    return(data)
+    ## idw (Inverse Distnace Weighting) interpolation from the gstat package
+  } else if (method == "idw") {
+    if (!requireNamespace("gstat", quietly = TRUE))
+      stop("Package 'gstat' not available! Method 'idw' not possible")
+    coordinates(p.df) = ~ x * y
+    projection(p.df) <- CRS(proj4string(data))
+    altitude.idw <- gstat::idw(altitude~1, p.df, data)
+    data <- altitude.idw["var1.pred"]
+    names(data) <- c("altitude")
+    return(data["var1.pred"])
+    ## kriging
+  } else if (tolower(method) == "sph" || tolower(method) == "gau") {
+    if (!requireNamespace("gstat", quietly = TRUE))
+      stop(paste0("Package 'gstat' not available! Method '", method, "' not possible"))
+    coordinates(p.df) = ~ x * y
+    projection(p.df) <- CRS(proj4string(data))
+
+    altitude.vgm = gstat::variogram(altitude~1, p.df)
+
+    if (tolower(method) == "sph") {
+      altitude.fit = gstat::fit.variogram(altitude.vgm, model = gstat::vgm("Sph"))
+    } else {
+      altitude.fit = gstat::fit.variogram(altitude.vgm, model = gstat::vgm("Gau"))
+    }
+    altitude.kriged = gstat::krige(altitude~1, p.df, data, model = altitude.fit)
+    data <- altitude.kriged["var1.pred"]
+    names(data) <- c("altitude")
+    return(data)
+  } else {
+    stop(paste0("The method '", method, "' is not known/implemented."))
+  }
 }

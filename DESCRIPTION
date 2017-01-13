@@ -16,7 +16,7 @@ LazyData: true
 Depends:
     R (>= 2.11.0)
 Imports:
-    gstat,
+    methods,
     plyr,
     raster,
     sp,
@@ -25,10 +25,9 @@ RoxygenNote: 5.0.1
 Suggests: 
     Cairo,
     ggplot2,
-    knitr,
+    gstat,
+    mgcv,
     OpenStreetMap,
     rgdal,
     rgl,
-    rmarkdown,
     viridis
-VignetteBuilder: knitr

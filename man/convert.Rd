@@ -18,7 +18,7 @@ convert(dates, source.dir = ".", target.dir = ".", verbose = TRUE, ...)
 \item{...}{additional parameters passed on to \code{\link{airplanes}}}
 }
 \description{
-Convert daily csv files produced by dump1080 to RData files
+Convert daily csv files produced by dump1090 to RData files
 }
 \author{
 Joerg Steinkamp \email{joergsteinkamp@yahoo.de}

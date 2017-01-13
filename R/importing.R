@@ -112,7 +112,7 @@ airplanes <- function(file, raw=FALSE, min.altitude=-999, max.altitude=999999, u
 
 #' Convert csv to RData
 #'
-#' Convert daily csv files produced by dump1080 to RData files
+#' Convert daily csv files produced by dump1090 to RData files
 #'
 #' @param dates a vector of dates
 #' @param source.dir path to where the flights_<yyyymmdd>.csv files are
