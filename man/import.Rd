@@ -17,7 +17,7 @@ import(dates, source.dir = ".", verbose = TRUE)
 a data.frame of all flights
 }
 \description{
-get the flights table in the workspace
+Loads one or more RData files produced by \code{\link{convert}} into one data.frame
 }
 \author{
 Joerg Steinkamp \email{joergsteinkamp@yahoo.de}

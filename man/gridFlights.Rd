@@ -2,7 +2,7 @@
 % Please edit documentation in R/processing.R
 \name{gridFlights}
 \alias{gridFlights}
-\title{apply a function on al flight nodes per gridcell}
+\title{Apply a function on all flight nodes per gridcell}
 \usage{
 gridFlights(data, FUN, col.names = c("lon", "lat", "altitude"),
   proj.in = "+init=epsg:4326",
@@ -28,7 +28,7 @@ gridFlights(data, FUN, col.names = c("lon", "lat", "altitude"),
 a SpatialPixelsDataFrame
 }
 \description{
-apply a function on al flight nodes per gridcell
+Produces a specific \code{\link{SpatialPixelsDataFrame}} of the given function for all nodes within a grid cell. Track information is lost.
 }
 \examples{
 library(raster)

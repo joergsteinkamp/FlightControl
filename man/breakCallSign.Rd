@@ -2,7 +2,7 @@
 % Please edit documentation in R/processing.R
 \name{breakCallSign}
 \alias{breakCallSign}
-\title{rename the callSign at a temporal break}
+\title{Rename the callSign at a temporal break}
 \usage{
 breakCallSign(flights, pause.limit = 900)
 }

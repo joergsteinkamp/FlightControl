@@ -1,4 +1,4 @@
-#' rename the callSign at a temporal break
+#' Rename the callSign at a temporal break
 #'
 #' A random string of six characters is attached to the callSign each time it appears again after more than `pause.limit` seconds.
 #'
@@ -60,7 +60,7 @@ FlightsPositionSubset <- function(flights, west=-180, east=180, south=-90, north
   return(flights)
 }
 
-#' Applies a filter by total altitude
+#' Applies a filter by total altitudinal change
 #'
 #' Creates subsets, if the plane is descending, ascending or passing by, based on a threshold value of total altitude change
 #'
@@ -98,7 +98,9 @@ flightsDirectionSplit <- function(flights, direction=NA, threshold=500) {
   }
 }
 
-#' apply a function on al flight nodes per gridcell
+#' Apply a function on all flight nodes per gridcell
+#'
+#' Produces a specific \code{\link{SpatialPixelsDataFrame}} of the given function for all nodes within a grid cell. Track information is lost.
 #'
 #' @param data the flights data.frame (at least with column names "lon", "lat" and "altitude")
 #' @param FUN function to apply
@@ -208,7 +210,13 @@ gridFlights <- function(data, FUN, col.names=c("lon", "lat", "altitude"),
   return(as(new.data, "SpatialPixelsDataFrame"))
 }
 
-#' Spatial interpolation
+#' Spatial smoothing
+#'
+#' An object produced by \code{\link{gridFlights}} is spatially interpolated to the whole rectangular extent. Four interplolation methods are implemented:
+#' 1. \code{\link{loess}} smoothest surface, not close to reality
+#' 2. \code{\link{gam}} smooth surface, closer to reality. For higher `k` values closer to reality, but computation time increases, too.
+#' 3. \code{\link{krige}} 'Sph'
+#' 4. \code{\link{krige}} 'Gau'
 #'
 #' @param data a SpatialPixelsDataFrame
 #' @param method interpolation method. One of 'loess' (default), 'gam', 'gau' or 'sph'

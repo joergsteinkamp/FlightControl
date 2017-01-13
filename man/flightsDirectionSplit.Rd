@@ -2,7 +2,7 @@
 % Please edit documentation in R/processing.R
 \name{flightsDirectionSplit}
 \alias{flightsDirectionSplit}
-\title{Applies a filter by total altitude}
+\title{Applies a filter by total altitudinal change}
 \usage{
 flightsDirectionSplit(flights, direction = NA, threshold = 500)
 }

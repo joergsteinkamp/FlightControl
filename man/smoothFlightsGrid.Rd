@@ -2,7 +2,7 @@
 % Please edit documentation in R/processing.R
 \name{smoothFlightsGrid}
 \alias{smoothFlightsGrid}
-\title{Spatial interpolation}
+\title{Spatial smoothing}
 \usage{
 smoothFlightsGrid(data, method = "loess", k = 5, ...)
 }
@@ -19,7 +19,11 @@ smoothFlightsGrid(data, method = "loess", k = 5, ...)
 a SpatialPixelsDataFrame
 }
 \description{
-Spatial interpolation
+An object produced by \code{\link{gridFlights}} is spatially interpolated to the whole rectangular extent. Four interplolation methods are implemented:
+1. \code{\link{loess}} smoothest surface, not close to reality
+2. \code{\link{gam}} smooth surface, closer to reality. For higher `k` values closer to reality, but computation time increases, too.
+3. \code{\link{krige}} 'Sph'
+4. \code{\link{krige}} 'Gau'
 }
 \examples{
 require(raster)

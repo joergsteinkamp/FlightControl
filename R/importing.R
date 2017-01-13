@@ -144,6 +144,8 @@ convert <- function(dates, source.dir=".", target.dir=".", verbose=TRUE, ...) {
 
 #' get the flights table in the workspace
 #'
+#' Loads one or more RData files produced by \code{\link{convert}} into one data.frame
+#'
 #' @param dates list of dates
 #' @param source.dir path to where the RData flights_<yyyymmdd>.RData files are
 #' @param verbose print some information during processing
