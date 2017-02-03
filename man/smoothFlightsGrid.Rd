@@ -20,10 +20,12 @@ a SpatialPixelsDataFrame
 }
 \description{
 An object produced by \code{\link{gridFlights}} is spatially interpolated to the whole rectangular extent. Four interplolation methods are implemented:
-1. \code{\link{loess}} smoothest surface, not close to reality
-2. \code{\link{gam}} smooth surface, closer to reality. For higher `k` values closer to reality, but computation time increases, too.
-3. \code{\link{krige}} 'Sph'
-4. \code{\link{krige}} 'Gau'
+\enumerate{
+\item \code{\link{loess}} smoothest surface, not close to reality
+\item \code{\link{gam}} smooth surface, closer to reality. For higher `k` values closer to reality, but computation time increases, too.
+\item \code{\link[gstat]{krige}} 'Sph'
+\item \code{\link[gstat]{krige}} 'Gau'
+}
 }
 \examples{
 require(raster)

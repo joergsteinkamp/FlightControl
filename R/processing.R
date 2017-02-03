@@ -49,7 +49,7 @@ breakCallSign <- function(flights, pause.limit=900) {
 #' @return new flights data.frame
 #' @export
 #' @author Joerg Steinkamp \email{joergsteinkamp@@yahoo.de}
-FlightsPositionSubset <- function(flights, west=-180, east=180, south=-90, north=90, length=1) {
+flightsPositionSubset <- function(flights, west=-180, east=180, south=-90, north=90, length=1) {
   lon=lat=NULL
   flights <- subset(flights, lon > west)
   flights <- subset(flights, lon < east)
@@ -213,11 +213,12 @@ gridFlights <- function(data, FUN, col.names=c("lon", "lat", "altitude"),
 #' Spatial smoothing
 #'
 #' An object produced by \code{\link{gridFlights}} is spatially interpolated to the whole rectangular extent. Four interplolation methods are implemented:
-#' 1. \code{\link{loess}} smoothest surface, not close to reality
-#' 2. \code{\link{gam}} smooth surface, closer to reality. For higher `k` values closer to reality, but computation time increases, too.
-#' 3. \code{\link{krige}} 'Sph'
-#' 4. \code{\link{krige}} 'Gau'
-#'
+#' \enumerate{
+#' \item \code{\link{loess}} smoothest surface, not close to reality
+#' \item \code{\link{gam}} smooth surface, closer to reality. For higher `k` values closer to reality, but computation time increases, too.
+#' \item \code{\link[gstat]{krige}} 'Sph'
+#' \item \code{\link[gstat]{krige}} 'Gau'
+#' }
 #' @param data a SpatialPixelsDataFrame
 #' @param method interpolation method. One of 'loess' (default), 'gam', 'gau' or 'sph'
 #' @param k if method='gam' parameter for the smooth term in te
